@@ -29,6 +29,7 @@ Exemple = perl bao3_regexp.pl 2020 3208 modeles/french-gsd-ud-2.5-191206.udpipe 
 Par défaut, le fichier de sortie des patrons se nomme patrons.txt
 
 
+
 Pour une recherche BAO3 uniquement (extraction de patrons) option -p
 
 $ARGV[0] = -p (extraction de patrons uniquement)
@@ -42,6 +43,7 @@ $ARGV[3] = motif de l'extraction POS-POS-POS (exmple DEP-NOUN-VERB, DET-NOUN, NO
 La recherche de motifs POS n'est pas limitee. Vous pouvez chercher 6 POS ou plus si vous le souhaitez
 
 Exemple : perl bao3_regexp.pl -p udpipe_sortie.txt extraction_patrons.txt DET-NOUN-VERB
+
 
 
 TRES IMPORTANT
