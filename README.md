@@ -38,9 +38,9 @@ $ARGV[1] = fichier udpipe à utiliser
 
 $ARGV[2] = nom de sortie du fichier d'extraction de patrons
 
-$ARGV[3] = motif de l'extraction POS-POS-POS (exmple DEP-NOUN-VERB, DET-NOUN, NOUN-VERB, DET-NOUN-AUX-VERB etc...)
+$ARGV[3] = motif de l'extraction POS-POS-POS (exmple DEP-NOUN-VERB, DET-NOUN, NOUN-VERB, DET-NOUN-AUX-VERB etc...), toujours le tiret de seperation entre les POS
 
-La recherche de motifs POS n'est pas limitee. Vous pouvez chercher 6 POS ou plus si vous le souhaitez
+La recherche de motifs POS n'est pas limitee. Vous pouvez chercher 5 POS ou plus si vous le souhaitez. Le minimum est 2.
 
 Exemple : perl bao3_regexp.pl -p udpipe_sortie.txt extraction_patrons.txt DET-NOUN-VERB
 
