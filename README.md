@@ -55,3 +55,5 @@ L'arborescence doit etre la suivante :
 /dossiermonprogramme/tree-tagger-linux-3.2/french-utf8.par (fichier de langue treetagger à placer ici)
 
 Le fichier treetagger2xml-utf8.pl n'est pas original. Il a été modifié par mes soins pour les besoins de la BAO2
+
+Le resultat de l'extraction des patrons est dans le fichier extraction_patrons.txt pour le motif DET-NOUN-VERB
