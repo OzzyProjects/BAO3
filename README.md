@@ -1,5 +1,5 @@
 # BAO3
-Boite à outils 3
+Boite à outils 3 réalisée dans le cadre du projet encadré INALCO-Sorbonne Nouvelle d'extraction et d'analyse morpho-synthaxique d'un fil XML RSS pour l'année 2021
 
 Pour une recherche BAO1 + BAO2 + BAO3 :
 
