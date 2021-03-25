@@ -389,6 +389,8 @@ sub extract_patrons{
 	open my $udfile, "<:encoding(utf-8)", $udfile_input or die "$!";
 	# pos_word = la chaine qui va contenir tous nos tokens par phrase organisés selon une structure precise
 	my $pos_words = undef;
+	# on retablit le separateur d'enregistrement à '\n'
+	local $/ = "\n";
 	# pour chaque ligne du fichier udpipe
 	while (my $line = <$udfile>){
 
