@@ -3,6 +3,9 @@ Boite à outils 3
 
 Pour une recherche BAO1 + BAO2 + BAO3 :
 
+Vous devez telecharger l'archive de tree-tagger ici https://icampus.univ-paris3.fr/pluginfile.php/207509/course/section/77973/tree-tagger%20%281%29
+et placer l'archive dezippée dans le repertoire du projet.
+
 ARGV[0] = repertoire dans lequel chercher les fichiers xml rss
 ARGV[1] = code de la categorie
 ARGV[2] = modele udpipe à utiliser
