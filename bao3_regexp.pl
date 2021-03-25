@@ -179,7 +179,7 @@ sub parsefiles{
         undef $/;
         my $ligne=<$input>; # on lit intégralement (slurp mode)
         # dans le perl cookbook, ils recommandent les modificateurs msx en general pour les regexp
-		while ($ligne=~/<item><title>(.+?)<\/title>.*?<description>(.+?)<\/description>/msgsx) {
+	while ($ligne=~/<item><title>(.+?)<\/title>.*?<description>(.+?)<\/description>/msgsx) {
             # l'option s dans la recherche permet de tenir compte des \n
             my $titre=&nettoyage($1);
             my $description=&nettoyage($2);
@@ -218,12 +218,12 @@ sub parsefiles{
         $compteur++;
     }
         
-    # fin du fichier xml
-    print $output_xml "</items>\n";
+    	# fin du fichier xml
+    	print $output_xml "</items>\n";
     
-    # on ferme le fichier xml de sortie de la BAO1
-    close $output_xml;
-    # on ferme le fichier txt de sortie de la BAO1
+    	# on ferme le fichier xml de sortie de la BAO1
+    	close $output_xml;
+    	# on ferme le fichier txt de sortie de la BAO1
 	close $output_txt;
     
 }
@@ -235,8 +235,8 @@ sub nettoyage {
 	my $texte=shift @_;
 	$texte=~s/<!\[CDATA\[//g;
 	$texte=~s/\]\]>//g;
-    $texte =~s/&nbsp/ /g;
-    $texte=~s/&/et/g;
+    	$texte =~s/&nbsp/ /g;
+    	$texte=~s/&/et/g;
 	# ajout du point en fin de chaîne
 	$texte=~s/$/\./g;
 	$texte=~s/\.+$/\./g;
