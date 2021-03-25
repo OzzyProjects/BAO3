@@ -33,4 +33,4 @@ L'arborescence doit etre la suivante :
 /dossiermonprogramme/treetagger2xml-utf8.pl (version modifiee)
 /dossiermonprogramme/tokenise-utf8.pl
 /dossiermonprogramme/tree-tagger-linux-3.2
-/dossiermonprogramme/tree-tagger-linux-3.2/french-utf8.par (fichier de langue treetagger à placer ici)"
+/dossiermonprogramme/tree-tagger-linux-3.2/french-utf8.par (fichier de langue treetagger à placer ici)
