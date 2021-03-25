@@ -26,7 +26,9 @@ La recherche de motifs POS n'est pas limitee. Vous pouvez chercher 6 POS si vous
 Exemple : perl bao3_regexp.pl -p udpipe_sortie.txt extraction_patrons.txt DET-NOUN-VERB
 
 IMPORTANT
-L'arborescence doit etre la suivante : 
+
+L'arborescence doit etre la suivante :
+
 /dossiermonprogramme/mon_script.pl (script en cours d'utilisation)
 /dossiermonprogramme/treetagger2xml-utf8.pl (version modifiee)
 /dossiermonprogramme/tokenise-utf8.pl
