@@ -23,6 +23,7 @@ my (@opt_p, @opt_s, $help);
 
 Getopt::Long::Configure("ignore_case", "prefix_pattern=(--|-)");
 
+# si une erreur se produit au moment de la recuperation des options et des arguments, on met fin au script
 GetOptions("p|patrons=s{3}" => \@opt_p, "s|standard=s{6}" => \@opt_s, "h|help" => \$help) or exit_bad_usage("Nombre d'arguments ou option invalide !\n");
 
 # lancement en version BAO3 uniquement
