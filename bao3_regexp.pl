@@ -459,7 +459,7 @@ sub exit_bad_usage {
 
    my $prog = basename($0);
    warn(@_) if @_;
-   die("Utilisez $prog --help or -h for help\n");
+   die("Utilisez $prog -help ou -h pour acceder à l'aide\n");
    exit(1);
 
 } 
