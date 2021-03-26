@@ -395,7 +395,7 @@ sub extract_patrons{
 	while (my $line = <$udfile>){
 
 		# si la phrase commence par # ou 1-2 etc..., on skip
-		next if $line =~ m/^#/ or $line =~ m/^\d+\-\d+/;
+		next if $line =~ /^(?:\d+\-\d+|#)/;
 
 		# si la ligne n'est pas une ligne vide
 		if ($line !~ /^$/){
