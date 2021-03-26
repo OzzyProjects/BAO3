@@ -64,4 +64,4 @@ L'arborescence doit etre la suivante :
 
 /dossiermonprogramme/tree-tagger-linux-3.2
 
-/dossiermonprogramme/tree-tagger-linux-3.2/french-utf8.par (fichier de langue treetagger à placer ici)";
+/dossiermonprogramme/tree-tagger-linux-3.2/french-utf8.par (fichier de langue treetagger à placer ici)
