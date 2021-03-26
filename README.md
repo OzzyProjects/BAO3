@@ -30,6 +30,7 @@ ARGV[6] = motifs pour l'extraction de patrons (forme POS-POS-POS etc...). Les PO
 
 
 Exemple = perl bao3_regexp.pl -s 2020 3208 modeles/french-gsd-ud-2.5-191206.udpipe udpipe_sortie.txt treetagger_sortie DET-NOUN
+
 Par defaut, le fichier de sortie dans lequel se trouve les patrons se nomme patrons.txt
 
 
