@@ -436,7 +436,6 @@ sub extract_patrons{
 }
 
 # fonction qui crée un pattern de recherche à partir de la forme POS-POS etc...
-
 sub create_pattern{
 
 	my $pattern = undef;
@@ -444,20 +443,16 @@ sub create_pattern{
 	my @liste_autorisee = qw(NOUN PUNCT VERB ADJ ADV ADP PROPN DET SCONJ NUM PRON AUX CCONJ);
 	# on split le motif d'extraction en fonction de '-'
 	my @liste_patrons = split(/-/, shift(@_));
-	# si un des POS n'existe pas, on met fin au script
+	# si il y a plusieurs POS alors scalar(@liste_patrons) > 1
+	die "Motif pour l'extraction de patrons incorrect !" unless scalar(@liste_patrons)>1;
+	# si un des POS n'existe pas dans UDPpipe, on met fin au script
 	foreach my $motif (@liste_patrons){
-		die "Un des motifs de recherche n'existe pas" unless ( $motif ~~ @liste_autorisee);
+		die "Un des motifs de recherche n'existe pas !" unless ( $motif ~~ @liste_autorisee);
 	}
 
-	if (scalar(@liste_patrons)){
-		# on va creer la regexp pour le motif d'extraction en question (voir la structure de pos_words)
-		for my $patron (@liste_patrons){
-			$pattern .= $patron.":(\\w+)-";
-		}
-	}
-	# si il n'y a pas de sperateur '-', ce n'est pas un motif d'extraction de patrons valable
-	else{
-		die "Motif pour l'extraction de patrons incorrect !";
+	# on va creer la regexp pour le motif d'extraction en question (voir la structure de pos_words)
+	for my $patron (@liste_patrons){
+		$pattern .= $patron.":(\\w+)-";
 	}
 
 	return $pattern;
