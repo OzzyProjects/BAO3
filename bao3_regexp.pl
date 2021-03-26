@@ -439,14 +439,10 @@ elsif (@opt_s){
 		my @liste_patrons = split(/-/, shift(@_));
 		# si il y a plusieurs POS alors scalar(@liste_patrons) > 1
 		die "Motif pour l'extraction de patrons incorrect !" unless scalar(@liste_patrons)>1;
-		# si un des POS n'existe pas dans UDPpipe, on met fin au script
+		# si un des POS n'existe pas dans UDPpipe, on met fin au script sinon on crée la regexp d'extraction du patron
 		foreach my $motif (@liste_patrons){
 			die "Un des motifs de recherche n'existe pas !" unless ( $motif ~~ @liste_autorisee);
-		}
-
-		# on va creer la regexp pour le motif d'extraction en question (voir la structure de pos_words)
-		for my $patron (@liste_patrons){
-			$pattern .= $patron.":(\\w+)-";
+			$pattern .= $motif.":(\\w+)-";
 		}
 
 		return $pattern;
