@@ -6,6 +6,7 @@ use Ufal::UDPipe; # pour l'etiquetage UDPipe
 use File::Remove qw(remove);
 use List::MoreUtils qw(natatime);
 use Getopt::Long qw(GetOptions);
+use File::Basename qw(basename);
 
 no warnings 'experimental::smartmatch';
 
@@ -22,7 +23,7 @@ my (@opt_p, @opt_s, $help);
 
 Getopt::Long::Configure("ignore_case", "prefix_pattern=(--|-)");
 
-GetOptions("p|patrons=s{3}" => \@opt_p, "s|standard=s{6}" => \@opt_s, "h|help" => \$help);
+GetOptions("p|patrons=s{3}" => \@opt_p, "s|standard=s{6}" => \@opt_s, "h|help" => \$help) or exit_bad_usage("Nombre d'arguments invalide !\n");
 
 if (@opt_p){
 
@@ -451,6 +452,15 @@ elsif (@opt_s){
 else{
 	print "Option inconnue ! veuillez utiliser -h ou -help.\n";
 }
+
+sub exit_bad_usage {
+
+   my $prog = basename($0);
+   warn(@_) if @_;
+   die("Utilisez $prog --help or -h for help\n");
+   exit(1);
+
+} 
 
 
 
