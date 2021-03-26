@@ -5,10 +5,11 @@ Cette BAO3 est une BAO1, BAO2 et BAO3 ou seulement une BAO3 (voir options)
 
 Le fil XML RSS du journal Le Monde sur lequel je travaille est telechargeable ici : http://www.tal.univ-paris3.fr/corpus/arborescence-filsdumonde-2020-tljours-19h.tar.gz
 
-Vous pouvez acceder à l'aide avec l'option -h:
-
 Vous devez telecharger l'archive de tree-tagger ici https://icampus.univ-paris3.fr/pluginfile.php/207509/course/section/77973/tree-tagger%20%281%29
 et placer l'archive dezippée dans le repertoire du projet.
+
+Vous pouvez acceder à l'aide avec l'option -h ou -help
+
 
 Pour une recherche BAO1 + BAO2 + BAO3 :
 
@@ -28,7 +29,7 @@ ARGV[5] = nom du fichier de sortie treetagger
 ARGV[6] = motifs pour l'extraction de patrons (forme POS-POS-POS etc...). Les POS sont separes par des -
 
 
-Exemple = perl bao3_regexp.pl 2020 3208 modeles/french-gsd-ud-2.5-191206.udpipe udpipe_sortie.txt treetagger_sortie DET-NOUN
+Exemple = perl bao3_regexp.pl -s 2020 3208 modeles/french-gsd-ud-2.5-191206.udpipe udpipe_sortie.txt treetagger_sortie DET-NOUN
 Par defaut, le fichier de sortie dans lequel se trouve les patrons se nomme patrons.txt
 
 
