@@ -25,6 +25,7 @@ Getopt::Long::Configure("ignore_case", "prefix_pattern=(--|-)");
 
 GetOptions("p|patrons=s{3}" => \@opt_p, "s|standard=s{6}" => \@opt_s, "h|help" => \$help) or exit_bad_usage("Nombre d'arguments invalide !\n");
 
+# lancement en version BAO3 uniquement
 if (@opt_p){
 
 	extract_patrons($opt_p[0], $opt_p[1], $opt_p[2]);
@@ -70,6 +71,7 @@ L'arborescence doit etre la suivante :
 	exit;
 }
 
+# lancement en version standard (BAO1 + BAO2 + BAO3)
 elsif (@opt_s){
 
 	# on recupere le premier argument (repertoire)
