@@ -415,9 +415,10 @@ elsif (@opt_s){
 				while (my @vals = $it->()){
 					# on ecrit dans le fichier de sortie l'ensemble de la sequence qui correspond aux patrons recherches
 					print $patron_file "@vals\n";
-				# on reset pos_words pour la phrase suivante
-				$pos_words = undef;
 				}
+				
+				# on reset pos_words pour la phrase suivante
+				$pos_words = undef;				
 			}	
 		}
 		# on ferme le fichier patron file
