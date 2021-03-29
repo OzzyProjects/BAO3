@@ -1,13 +1,16 @@
 #!/usr/bin/perl
+
 use strict;
 #use warnings;
+
 use Timer::Simple; # pour le timer
 use Ufal::UDPipe; # pour l'etiquetage UDPipe
-use File::Remove qw(remove);
-use List::MoreUtils qw(natatime);
-use Getopt::Long qw(GetOptions);
-use File::Basename qw(basename);
+use File::Remove qw(remove); # pour la suppression des fichiers
+use List::MoreUtils qw(natatime); # pour la recherche des patrons
+use Getopt::Long qw(GetOptions); # pour la gestion des options
+use File::Basename qw(basename); # pour avoir le nom du script
 
+# pour supprimer le warning smartmatch à cause de l'utilisation de l'operateur ~~
 no warnings 'experimental::smartmatch';
 
 # on ne travaille qu'en utf-8
@@ -19,24 +22,28 @@ my $t = Timer::Simple->new();
 $t->start;
 
 # on construit notre outil de gestion des options
-my (@opt_p, @opt_s, $help);
+my (@opt_p, @opt_s, @opt_m, $help);
 
-Getopt::Long::Configure("ignore_case", "prefix_pattern=(--|-)");
+Getopt::Long::Configure("posix_default", "ignore_case", "prefix_pattern=(--|-)", "require_order");
 
 # si une erreur se produit au moment de la recuperation des options et des arguments, on met fin au script
-GetOptions("p|patrons=s{3}" => \@opt_p, "s|standard=s{6}" => \@opt_s, "h|help" => \$help) or exit_bad_usage("Nombre d'arguments ou option invalide !\n");
+GetOptions("p|patrons=s{2}" => \@opt_p, "s|standard=s{5}" => \@opt_s, "m|motif=s{2,}" => \@opt_m, "h|help" => \$help) or exit_bad_usage("Nombre d'arguments ou option invalide !\n");
 
 # lancement en version BAO3 uniquement
 if (@opt_p){
 
-	extract_patrons($opt_p[0], $opt_p[1], $opt_p[2]);
+	#@opt_m est le tableau dans lequel on recupere les POS du motif à extraire
+	&extract_patrons($opt_p[0], $opt_p[1], \@opt_m);
 
 }
 
+# menu d'aide
 elsif ($help){
 
 my $help = "\nBienvenue dans le module d'aide !\n
 Pour une recherche BAO1 + BAO2 + BAO3 :
+
+option -s ou -standard
 
 ARGV[0] = option -s (standard BAO1 + BAO2 + BAO3)
 ARGV[1] = repertoire dans lequel chercher les fichiers xml rss
@@ -44,20 +51,24 @@ ARGV[2] = code de la categorie
 ARGV[3] = modele udpipe à utiliser
 ARGV[4] = nom du fichier de sortie udpipe (.txt)
 ARGV[5] = nom du fichier de sortie treetagger
-ARGV[6] = motifs pour l'extraction de patrons (forme POS-POS-POS etc...). Les POS sont separes par des -
+ARGV[6] = -m (option de motif de l'extraction du patron)
+ARGV[7-] = motif de l'extraction du patron (POS POS POS)
 
-Exemple = perl bao3_regexp.pl -s 2020 3208 modeles/french-gsd-ud-2.5-191206.udpipe udpipe_sortie.txt treetagger_sortie DET-NOUN
+Exemple = perl bao3_regexp.pl -s 2020 3208 modeles/french-gsd-ud-2.5-191206.udpipe udpipe_sortie.txt treetagger_sortie -m DET NOUN VERB
 Par defaut, le fichier de sortie dans lequel se trouve les patrons se nomme patrons.txt
 
-Pour une recherche BAO3 uniquement (extraction de patrons) option -p
+Pour une recherche BAO3 uniquement (extraction de patrons) 
+
+option -p ou -patrons
 
 ARGV[0] = -p (extraction de patrons uniquement)
 ARGV[1] = fichier udpipe à utiliser
 ARGV[2] = nom de sortie du fichier d'extraction de patrons
-ARGV[3] = motif de l'extraction POS-POS-POS (exmple DET-NOUN-VERB, DET-NOUN, NOUN-VERB etc...)
+ARGV[3] = -m (option de motif de l'extraction du patron)
+ARGV[4-] = motif de l'extraction du patron (POS POS POS)
 La recherche de motifs POS n'est pas limitee. Vous pouvez chercher 5 POS si vous le souhaitez. Le minumum est de deux.
 
-Exemple : perl bao3_regexp.pl -p udpipe_sortie.txt extraction_patrons.txt DET-NOUN-AUX-VERB
+Exemple : perl bao3_regexp.pl -p udpipe_sortie.txt extraction_patrons.txt -m DET NOUN AUX VERB
 
 IMPORTANT
 
@@ -125,7 +136,8 @@ elsif (@opt_s){
 	&etiquetage($udpipe_model, $udpipe_file, $treetagger_file);
 
 	# on va extraire les patrons et les ecrire dans un fichier
-	&extract_patrons($udpipe_file, $default_udfile, $motifs_patrons);
+	# on passe par reference le tableau des POS (pas le choix)
+	&extract_patrons($udpipe_file, $default_udfile, \@opt_m);
 
 	# parcours toute l'arborescence de fichiers à partir d'un repertoire
 	sub parcourir{
@@ -370,59 +382,100 @@ elsif (@opt_s){
 		my $udfile_input = shift @_;
 		# on recupere le nom du fichier d'extraction des patrons
 		my $udfile_output = shift @_;
-		# on recupere le motif d'extraction sous la forme POS-POS...
+		# on recupere le motif d'extraction sous la forme d'une reference à un array
 		my $patron = shift @_;
 		# on crée la regexp pour ce motif d'extraction
-		my $patrons = create_pattern($patron);
-		# on compte le nombre d'occurences de POS dans le motif pour l'iteration au moment de la capture en comptant les '-'
-		my $counter = () = $patron =~ /-/g;
-		open my $patron_file, '>:encoding(utf-8)', $udfile_output or die "$!\n";
+		my $patron_regexp = &create_pattern($patron);
+		# on compte le nombre d'occurences de POS dans le motif pour l'iteration au moment de la capture en comptant les '-';
 		# le pattern pour extraire le mot et son POS dans le fichier de sortie udpipe
 		my $pattern = qr(^\d+\t([^\t]+)\t[^\t]+\t([^\t]+)\t);
-		open my $udfile, "<:encoding(utf-8)", $udfile_input or die "$!\n";
 		# pos_word = la chaine qui va contenir tous nos tokens + POS concaténés par phrase organisés selon une structure precise
 		my $pos_words = undef;
 		# on retablit le separateur d'enregistrement à '\n' pour enlever le slurp mode
 		local $/ = "\n";
+		open my $patron_file, '>:encoding(utf-8)', $udfile_output or die "$!\n";
+		open my $udfile, "<:encoding(utf-8)", $udfile_input or die "$!\n";
+
+		# numero de la ligne dans laquelle se trouve le pos
+		my $target_line_number = -1;
+		# numero de la ligne courante dans la phrase
+		my $current_line_number = 0;
+
 		# pour chaque ligne du fichier udpipe
 		while (my $line = <$udfile>){
 
-			# si la phrase commence par # ou 1-2 etc..., on passe à la suivante
-			next if $line =~ /^(?:\d+\-\d+|#)/;
+			# on enleve le saut de ligne final
+			chomp $line;
+			# on enleve les sauts de ligne et les retours charriot en fin de ligne
+			$line =~ s/\r\n?//;
 
-			# si la ligne n'est pas une ligne vide
-			if ($line !~ /^$/){
-				# on recupere la forme du mot et son POS
+			# on recupere le numero courant de la ligne dans la phrase
+			$line =~ /^(\d+)/;
+			$current_line_number = $1;
+
+			# si la phrase commence par # ou qu'il s'agit d'une ligne entre la ligne du pos mal sequence et la target_line_number, on passe à la phrase suivante
+			next if $line =~ /^#/ or $current_line_number == $target_line_number - 1;
+
+			# si la ligne n'est pas une ligne vide ou n'est faite uniquement que de caracteres non imprimables
+			if ($line !~ /^\R*$/){
+
+				# si la ligne commence par une sequence du genre 3-4 ou 1-2, on va extraire la forme du mot et l'ajouter à pos_words
+				if ($line =~ /^\d+\-\d+/){
+					# on établit le numero de la ligne à atteindre pour avoir le pos du mot (c'est n+1)
+					$target_line_number = $current_line_number + 1;
+					# on recupere la forme du mot qu'on ajoute à $pos_pattern
+					$line =~ /^\d+\-\d+\t([^\t]+)/;
+					$pos_words .= "$1ͱ";
+				}
+				# si la ligne courante est la target line, on va recuperer le POS du mot et l'ajouter à pos_words
+				elsif ($current_line_number == $target_line_number){
+
+					# on recupere le pos du mot dans le fichier udpipe à la target_line_number
+					$line =~ /^\d+\t[^\t]+\t[^\t]+\t([^\t]+)\t/;
+					# on ajoute à pos_words le motif formeͱpos separe par le caractere ←
+					$pos_words .= "$1←";
+					# on reset la target_line_number à 0
+					$target_line_number = 0;
+
+				}
+				# on recupere la forme du mot et son POS si il s'agit d'une ligne normale
+				else{
+
 				$line =~ /$pattern/;
-				# on les ordonne de cette facon dans pos_words; POS:forme-, qu'on ajoute à la chaine pos_words
-				$pos_words .= "$2:$1-";
+				# on les ordonne de cette facon dans pos_words; formeͱPOS←, qu'on ajoute à la chaine pos_words
+				$pos_words .= "$1ͱ$2←";
+				}
 				
 			} 
 			# si on est arrivé à la fin de notre phrase (ligne vide dans udpipe comme seperateur), il est temps de faire l'extraction des patrons
 			else{
+
 				# on recupere l'ensemble des elements capturés dans @capture qui repondent au motif d'extraction
-				my @capture = ($pos_words =~ /$patrons/g);
+				my @capture = ($pos_words =~ /$patron_regexp/g);
 				# on skip si @capture est vide (pas de patron correspondant)
 				if (@capture == 0){
 					# on reset pos_words et on passe à la phrase suivante
 					$pos_words = undef;
 					next;
 				}
-				# on instancie un iterateur qui va iterer en fonction du nombre d'elements dans le motif d'extraction du patron pour avoir la sequence complete du motif
-				# ici on le calcule en comptant les occurrences de '-' dans le motif d'extraction + 1. si on a 1 separateur, on a deux elements etc...
+				# on instancie un iterateur qui va iterer par dessus x elements en gardant les valeurs skippées des elements dans une liste.
+				# ici on calcule le x en comptant le nombre d'elements de POS constituant le motif avec scalar.
 				# c'est le role de la fonction natatime de List::MoreUtils
-				my $it = natatime $counter + 1, @capture;
+				my $it = natatime scalar(@$patron), @capture;
 				while (my @vals = $it->()){
-					# on ecrit dans le fichier de sortie l'ensemble de la sequence qui correspond aux patrons recherches
+					# on ecrit dans le fichier de sortie l'ensemble de la sequence qui correspond au patron recherche
 					print $patron_file "@vals\n";
 				}
-				
+
 				# on reset pos_words pour la phrase suivante
-				$pos_words = undef;				
+				$pos_words = undef;	
+
 			}	
 		}
-		# on ferme le fichier patron file
+
+		# on ferme le fichier patron_file et le fichier UDPipe
 		close $patron_file;
+		close $udfile;
 
 		# on stoppe le timer
 	    $t->stop;
@@ -430,20 +483,19 @@ elsif (@opt_s){
 	    print "time so far: ", $t->elapsed, " seconds\n";
 	}
 
-	# fonction qui crée un pattern de recherche à partir de la forme POS-POS etc...
+	# fonction qui crée un pattern de recherche à partir du modele de POS entré
 	sub create_pattern{
 
 		my $pattern = undef;
 		# on etablit la liste des POS autorisés dans UDPipe
 		my @liste_autorisee = qw(NOUN PUNCT VERB ADJ ADV ADP PROPN DET SCONJ NUM PRON AUX CCONJ);
-		# on split le motif d'extraction en fonction de '-'
-		my @liste_patrons = split(/-/, shift(@_));
-		# si il y a plusieurs POS alors scalar(@liste_patrons) > 1
-		die "Motif pour l'extraction de patrons incorrect !" unless scalar(@liste_patrons)>1;
-		# si un des POS n'existe pas dans UDPpipe, on met fin au script sinon on crée la regexp d'extraction du patron
-		foreach my $motif (@liste_patrons){
-			die "Un des motifs de recherche n'existe pas !" unless ( $motif ~~ @liste_autorisee);
-			$pattern .= $motif.":(\\w+)-";
+		my $liste_patrons = shift(@_);
+		# si un des POS n'existe pas dans UDPpipe, on met fin au script sinon on cree la regexp de recherche de patrons
+		foreach my $pos (@$liste_patrons){
+			die "Un des motifs de recherche n'existe pas !\n" unless ($pos ~~ @liste_autorisee);
+			# on n'interpolate pas la string (simple quote) pour eviter les soucis des caracteres speciaux ensuite à despecialiser
+			# j'ai mis l'unicode point de l'apastrophe "francaise" car ca ne marchait pas sinon
+			$pattern .= '(\w+\-?\w*(?:\x{2019}{1})?)ͱ'.$pos."←";
 		}
 
 		return $pattern;
@@ -457,10 +509,13 @@ sub exit_bad_usage {
 
    my $prog = basename($0);
    warn(@_) if @_;
-   die("Utilisez $prog -help ou -h pour acceder à l'aide\n");
+   die "Utilisez $prog -help ou -h pour acceder a l'aide\n";
    exit(1);
 
 } 
+
+
+
 
 
 
