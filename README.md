@@ -5,9 +5,11 @@ Cette BAO3 est une BAO1, BAO2 et BAO3 ou seulement une BAO3 (voir options).
 
 La version 2 consiste en une modification en profondeur du code pour gerer les options.
 
-La version 2.1 ne traite que les tokens originaux, ceux qui sont divisés en deux tokens. Ainsi pour les DET, vous aurez pat exemple les "des" mais pas les formes "de" et "les". C'est la prise en compte des lignes commencant par 4-5 ou 8-9 par exemple.
+La version 2.1 ne traite que les tokens originaux, ceux qui sont divisés en deux tokens par exemple dans UDPipe. Ainsi pour les DET, vous aurez par exemple les "des" mais pas les formes "de" et "les". C'est la prise en compte des lignes commencant par 4-5 ou 8-9 par exemple.
 
 La version 3.0 integre une classification automatique des fils RSS parcourus grace à la similarité cosinus avec un taux de réussite de plus de 90%.
+
+De plus, elle permet l'extraction des patrons morpho-synthaxiques également à partir du fichier de sortie XML treetagger, en plus d'UDPipe.
 
 Le fil XML RSS du journal Le Monde sur lequel je travaille est telechargeable ici : http://www.tal.univ-paris3.fr/corpus/arborescence-filsdumonde-2020-tljours-19h.tar.gz
 
@@ -152,4 +154,4 @@ L'arborescence de travail doit etre organisee de cette maniere :
 
 
 Pour recuperer le fichier treetagger2xml-utf8.pl modifie, vous pouvez le telecharger sur mon github :
-https://github.com/OzzyProjects/BAO3\n
+https://github.com/OzzyProjects/BAO3
