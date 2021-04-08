@@ -51,15 +51,26 @@ L'option -f n'est disponible que pour une utilisation stantard (option -s).
 
 
 option -s ou -standard (a specifier en premier en argument dans la ligne de commandes)
+
+
 ARGV[0] = option -s (standard BAO1 + BAO2 + BAO3)
+
 ARGV[1] = repertoire dans lequel chercher les fichiers xml rss
+
 ARGV[2] = code de la categorie
+
 ARGV[3] = modele udpipe à utiliser
+
 ARGV[4] = nom du fichier de sortie udpipe (.txt)
+
 ARGV[5] = nom du fichier de sortie treetagger (sans extension)
+
 ARGV[6] = -u (extraction a partir du fichier udpipe) (facultatif) sinon treetagger par defaut
+
 ARGV[6] = -m (option de motif de l'extraction du patron)
+
 ARGV[7,] = motif de l'extraction du patron (POS POS POS)
+
 
 Exemple d'une utilisation standard avec extraction udpipe + classification des fils RSS:
 
@@ -83,18 +94,32 @@ repertoire courant du script.
 
 
 option -p ou -patrons (a specifier en premier en argument dans la ligne de commandes)
+
+
 ARGV[0] = -p (extraction de patrons uniquement)
+
 ARGV[1] = fichier udpipe/treetagger à utiliser
+
 ARGV[2] = nom de sortie du fichier d'extraction de patrons
+
 ARGV[3] = -u (extraction à partir du fichier udpipe) (facultatif) sinon treetagger par defaut
+
 ARGV[3-4] = -m (option de motif de l'extraction du patron)
+
 ARGV[4-5+,] = motif de l'extraction du patron (POS POS POS)
 
+
 La recherche de motifs POS n'est pas limitee. Vous pouvez chercher 5 POS ou plus si vous le souhaitez. Le minumum est de deux.
+
+
 Exemple d'utilisation en mode BAO3 uniquement utilisant le fichier UDPipe:
 perl bao3_regexp.pl -p udpipe_sortie.txt extraction_patrons.txt -u -m NOUN AUX VERB
+
+
 Exemple d'utilisation en mode BAO3 uniquement utilisant le fichier XML treetagger:
 perl bao3_regexp.pl -p treetagger_sortie.xml extraction_patrons.txt -m DET NOM ADJ
+
+
 Par defaut, l'extraction des patrons utilise le fichier treetagger comme unique support(sauf option -u)
 
 
