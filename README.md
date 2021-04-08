@@ -1,9 +1,10 @@
-# BAO3 version 2.1
+# BAO3 version 3.0
 Boite à outils 3 réalisée dans le cadre du projet encadré INALCO-Sorbonne Nouvelle d'extraction et d'analyse morpho-synthaxique d'un fil XML RSS pour l'année 2021
 LA BAO2 etant terminée (etiquetage avec treetagger et udpipe), on passe à la BAO3 (extraction de patrons)
 Cette BAO3 est une BAO1, BAO2 et BAO3 ou seulement une BAO3 (voir options)
 La version 2 consiste en une modification en profondeur du code pour gerer les options.
 La version 2.1 ne traite que les tokens originaux, ceux qui ne sont divisés en deux tokens. Ainsi pour les DET, vous aurez pae exemple les "des" mais pas les formes "de" et "les". C'est la prise en compte des lignes commencant par 4-5 ou 8-9 par exemple.
+La version 3.0 integre une classification automatique des fils RSS parcourus grace à la similarité cosinus.
 
 Le fil XML RSS du journal Le Monde sur lequel je travaille est telechargeable ici : http://www.tal.univ-paris3.fr/corpus/arborescence-filsdumonde-2020-tljours-19h.tar.gz
 
