@@ -5,7 +5,7 @@
 
 #--------------------------------------------------------------------------------------------------------------------------------------------------------
 # ARMANGAU Etienne
-# BAO1 + BAO2 + BAO3 + extraction des patrons à partir de UDPipe ou treetagger + classifcation automatique des fils RSS parcourus
+# BAO1 + BAO2 + BAO3 + extraction des patrons à partir de UDPipe ou treetagger + classification automatique des fils RSS parcourus
 #--------------------------------------------------------------------------------------------------------------------------------------------------------
 
 use Timer::Simple; # pour le timer
