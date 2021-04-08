@@ -141,9 +141,13 @@ L'arborescence de travail doit etre organisee de cette maniere :
 
 
 /dossiermonprogramme/mon_script.pl (le script principal)
+
 /dossiermonprogramme/treetagger2xml-utf8.pl (version modifiee par mes soins)
+
 /dossiermonprogramme/tokenise-utf8.pl
+
 /dossiermonprogramme/tree-tagger-linux-3.2
+
 /dossiermonprogramme/tree-tagger-linux-3.2/french-utf8.par (fichier de langue treetagger a placer ici)
 
 
