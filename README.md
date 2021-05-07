@@ -1,13 +1,15 @@
-# BAO3 version 3.0
+# BAO3 version 3.1
 Boite à outils 3 réalisée dans le cadre du projet encadré INALCO-Sorbonne Nouvelle d'extraction et d'analyse morpho-synthaxique d'un fil XML RSS pour l'année 2021
 LA BAO2 etant terminée (etiquetage avec treetagger et udpipe), on passe à la BAO3 (extraction de patrons)
-Cette BAO3 est une BAO1, BAO2 et BAO3 ou seulement une BAO3 (voir options).
+Cette BAO3 est une BAO1, BAO2 et BAO3 ou seulement une BAO3 (voir options). Elle peut aussi servir comme outils de classification seulement  ou d'extraction de patrons à partir de treetagger ou udpipe.
 
 La version 2 consiste en une modification en profondeur du code pour gerer les options.
 
 La version 2.1 ne traite que les tokens originaux, ceux qui sont divisés en deux tokens par exemple dans UDPipe. Ainsi pour les DET, vous aurez par exemple les "des" mais pas les formes "de" et "les". C'est la prise en compte des lignes commencant par 4-5 ou 8-9 par exemple.
 
 La version 3.0 integre une classification automatique des fils RSS parcourus grace à la similarité cosinus avec un taux de réussite de plus de 90%.
+
+La version 3.1 utilise les formes lémmatisées des mots pour une précision accrue (95% de succes).
 
 De plus, elle permet l'extraction des patrons morpho-synthaxiques également à partir du fichier de sortie XML treetagger, en plus d'UDPipe.
 
