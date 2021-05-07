@@ -9,75 +9,78 @@
 #--------------------------------------------------------------------------------------------------------------------------------------------------------
 
 use Timer::Simple; # pour le timer
-use Ufal::UDPipe; # pour l'etiquetage UDPipe
+use Ufal::UDPipe; # pour l’étiquetage UDPipe
 use File::Remove qw(remove); # pour la suppression des fichiers
 use List::MoreUtils qw(natatime); # pour la recherche des patrons
 use Getopt::Long qw(GetOptions); # pour la gestion des options
 use File::Basename qw(basename); # pour avoir le nom du script
-use Unicode::Normalize;
-use Data::CosineSimilarity; # pour la recherche des simalarités cosinus entre les textes
+use Unicode::Normalize qw(normalize);
+use Data::CosineSimilarity; # pour la recherche des similarités cosinus entre les textes
+use Data::Dump qw(dump);
+use List::MoreUtils qw(uniq);
+use Thread;
+use Scalar::Util qw(blessed);
 
-# pour supprimer le warning smartmatch à cause de l'utilisation de l'operateur ~~
+# pour supprimer le warning smartmatch à cause de l'utilisation de l’opérateur ~~
 no warnings 'experimental::smartmatch';
+# pour les informations sur les opérations I/O (plutot que or die $! à chaque fois)
+#use autodie;
 
 # on ne travaille qu'en utf-8
 use open qw/ :std :encoding(UTF-8)/;
 
-# on instancie un timer commencant à 0.0s par défaut
+# on instancie un timer commençant à 0.0s par défaut
 my $t = Timer::Simple->new();
 # on lance le timer
 $t->start;
 
 # on construit notre outil de gestion des options
-my (@opt_p, @opt_s, @opt_m, $opt_patrons, @opt_filter, $help);
+my (@opt_p, @opt_s, @opt_m, $opt_patrons, @opt_filter, @opt_class, $help) = (undef) x 7;
 
 Getopt::Long::Configure("posix_default", "ignore_case", "prefix_pattern=(--|-)", "require_order");
 
-# si une erreur se produit au moment de la recuperation des options et des arguments, on met fin au script
+# si une erreur se produit au moment de la récupération des options et des arguments, on met fin au script
 GetOptions("p|patrons=s{2}" => \@opt_p, "s|standard=s{5}" => \@opt_s, "f|filter=s{2}" => \@opt_filter,
-"u|udpipe" => \$opt_patrons, "m|motif=s{2,}" => \@opt_m, "h|help" => \$help) or exit_bad_usage("Nombre d'arguments ou option invalide !\n");
+"u|udpipe" => \$opt_patrons, "m|motif=s{2,}" => \@opt_m, , "c|class=s{4}" => \@opt_class, "h|help" => \$help) or exit_bad_usage("Nombre d'arguments ou option invalide !\n");
 
 # on instancie un nouvel objet Data::CosineSimilarity
 my $cosinus_similarity = Data::CosineSimilarity->new;
-# filehandle du fichier de sortie recapitulatif
+# filehandle du fichier de sortie récapitulatif de classification
 my $filehandle = undef;
-# nombre de fichiers rss traités pour une rubrique
-my $rubriques = 0;
-# nombre de bonnes categories attribuées
-my $rubriques_okay  = 0;
+# nombre de fichiers rss traités pour une rubrique, nombre de bonnes catégories attribuées
+my ($rubriques, $rubriques_okay)  = (0) x 2;
 
-# liste de stop words. On peut aussi la charger via un fichier mais la recherche ne marche pas (stopwords non pris en compte)
-# my @stopwords = load_stopwords("stoplist.fr-etendue-utf8.txt");
-my @stopwords = qw(
-	a afin aient ait ainsi ailleurs alors apres assez aux aussi autant autre autres avaient avait
-	cas ceci ce cela cependant certains certaines certain ces celui ceux chacun chacune chaque
-	cinq cinquieme comme comment contre concernant dans deja dela depuis derniere des desormais dessus
-	deux deuxièmement devait devra devraient devrait devront dix dizaines
-	dizaines doit doivent donc dont douze du due dues duquel durant
-	environ est et/ou etaientetait etant ete etre eux
-	faire faisait faisant fait faite fallait fasse faut fera ferait font furent fut
-	laquelle la le lequel les lesquelles lesquels leur leurs lieu loi longtemps lors lorsqu lorsque lui
-	mais malgré même mieux mis mise mme moins
-	neanmoins nombre non nos notre
-	par parce parmi pas peu peut peuvent plein plupart plus plusieurs pour pourquoi pourra pourraient pourrait pouvant
-	premier premires pres presque puisque puisse puissent
-	quand quant quatre que quel quelle quelles quelque quelques quels qui quoi
-	selon sera seraient serait seront ses six soient soit son sont sous souvent sur surtout
-	tant tel telle telles tels tous tout tout toute toutes toutefois trente tres trop
-	une uni vers veulent voici voire voudrait vue
-);
-
-# reference anonyme à un dictionnaire qui associe chaque clé (code de la categorie) à sa valeur (nom de la categorie)
+# référence anonyme à un dictionnaire qui associe chaque clé (code de la catégorie) à sa valeur (nom de la catégorie)
 my $categories = {3208 => "une", 3210 => "international", 3214 => "europe", 3224 => "societe", 3232 => "idees", 3234 => "economie",
 3236 => "actualite_medias", 3242 => "sport", 3244 => "planete", 3246 => "culture", 3260 => "livres", 3476 => "cinema",
 3546 => "voyage", 65186 => "technologies", 8233 => "politique", "env_sciences" => "sciences"};
-# /!\ avec categorie : les 4 premiers chiffres ne fonctionnent pas
+# /!\ avec catégorie : les 4 premiers chiffres ne fonctionnent pas pour technologies (on utilise les 5 premiers pour cette rubrique)
 
-# on crée un hash à partir du tableau des stopwords (plus facile pour la recherche ensuite)
-my %stop_words = map { $_ => 1 } @stopwords;
+# partie Python ici
+# on utilise Spacy pour le pré-processing (lemmes + filtrage des stop words) et écriture du résultat dans un fichier de sortie
+# avec l'extension token, car le pipe Inline::Python est très long. Il n'existe pas de bons lemmatiseurs en français en Perl
+use Inline Python => <<'END_OF_PYTHON';
+
+import spacy
+from spacy.lang.fr.stop_words import STOP_WORDS as fr_stop
+nlp = spacy.load('fr_core_news_md')
+nlp.max_length = 40000000
+
+fr_stop = set(fr_stop)
+def file_lemmatizer(file):
+	with open(str(file)+'tokens', 'w',encoding='utf-8') as output:
+		doc = nlp(open(file).read())
+		output.write(' '.join(list(map(lambda token: token.lemma_ if token.lemma_ not in fr_stop and len(token.lemma_) >3 else "", doc))))
+		return str(file)+'tokens'
+
+def content_lemmatizer(data):
+	doc = nlp(data)
+	return list(map(lambda token: token.lemma_ if token.lemma_ not in fr_stop and len(token.lemma_) >3 else "", doc))
+END_OF_PYTHON
+# fin de la partie python
 
 # lancement en version BAO3 uniquement
-if (@opt_p){
+if (@opt_p and not @opt_s){
 
 	#@opt_m est le tableau dans lequel on recupere les POS du motif à extraire
 	# si opt_patrons est definie, on utilise le fichier de sortie udpipe pour l'extraction
@@ -88,6 +91,26 @@ if (@opt_p){
 	else{
 		&extract_patrons_treetagger($opt_p[0], $opt_p[1], \@opt_m);
 	}
+
+}
+
+# lancement en version classification uniquement
+elsif (@opt_class and not @opt_s){
+
+	print("Lancement en mode classification uniquement !\n");
+
+	open $filehandle, ">:encoding(utf-8)", $opt_class[3] or die "$!\n";
+
+	&train_cosine_similarity($opt_class[1], $opt_class[2]);
+
+	&parcourir($opt_class[0]);
+
+	close $filehandle;
+
+	# on stoppe le timer
+	$t->stop;
+	# temps écoulé depuis le lancement du programme
+	print "time so far: ", $t->elapsed, " seconds\n";
 
 }
 
@@ -122,10 +145,11 @@ un recapitulatif des resultats obtenus dans un fichier de sortie. Ce fichier con
 la categorie identifiee en premier et la veritable categorie à laquelle appartient le fichier XML RSS.
 Vous avez à la derniere ligne de ce fichier le taux de succes de la classification via Data::CosineSimilarity.
 Arguments à spécifier apres l'option -f
-- repertoire dans lequel se trouve les fichiers d'entrainement des années precédentes (pas de sous dossier).
+- repertoire dans lequel se trouve les fichiers d'entrainement des annees precedentes (pas de sous dossier).
 Les fichiers doivent porter le nom d'une categorie et avoir une extension .txt
+Il ne doit y avoir que ces fichiers et rien d'autre dans le repertoire.
 Il ne doit y avoir que ces fichiers dans le repertoire.
-- nom du fichier de sortie recapitulatif (c'est à vous de choisir)
+- nom du fichier de sortie recapitulatif (c'est a vous de choisir)
 L'option -f n'est disponible que pour une utilisation stantard (option -s).
 
 
@@ -146,7 +170,7 @@ ARGV[7,] = motif de l'extraction du patron (POS POS POS)
 
 Exemple d'une utilisation standard avec extraction udpipe + classification des fils RSS:
 
-perl bao3_regexp.pl -s 2020 3476 modeles/french-gsd-ud-2.5-191206.udpipe udpipe_sortie.txt treetagger_sortie -f 
+perl bao3_regexp_classification.pl -s 2020 3476 modeles/french-gsd-ud-2.5-191206.udpipe udpipe_sortie.txt treetagger_sortie -f 
 categorie-2017-2018-2019-sf sortie_verif.txt -u -m DET NOUN VERB
 
 Dans cet exemple, le script effectue une recherche standard avec classification (resultats dans sortie_verif.txt)
@@ -154,7 +178,7 @@ et spécifie que l'extraction des patrons (ici DET NOUN VERB) utilise le fichier
 
 Exemple d'une utilisation standard avec extraction treetagger sans classification:
 
-perl bao3_regexp.pl -s 2020 3476 modeles/french-gsd-ud-2.5-191206.udpipe udpipe_sortie.txt treetagger_sortie -m NOM ADJ
+perl bao3_regexp_classification.pl -s 2020 3476 modeles/french-gsd-ud-2.5-191206.udpipe udpipe_sortie.txt treetagger_sortie -m NOM ADJ
 
 Par defaut, le fichier de sortie dans lequel se trouve les patrons extraits se nomme patrons.txt et se situe dans le 
 repertoire courant du script.
@@ -175,11 +199,11 @@ La recherche de motifs POS n'est pas limitee. Vous pouvez chercher 5 POS ou plus
 
 Exemple d'utilisation en mode BAO3 uniquement utilisant le fichier UDPipe:
 
-perl bao3_regexp.pl -p udpipe_sortie.txt extraction_patrons.txt -u -m NOUN AUX VERB
+perl bao3_regexp_classification.pl -p udpipe_sortie.txt extraction_patrons.txt -u -m NOUN AUX VERB
 
 Exemple d'utilisation en mode BAO3 uniquement utilisant le fichier XML treetagger:
 
-perl bao3_regexp.pl -p treetagger_sortie.xml extraction_patrons.txt -m DET NOM ADJ
+perl bao3_regexp_classification.pl -p treetagger_sortie.xml extraction_patrons.txt -m DET NOM ADJ
 
 Par defaut, l'extraction des patrons utilise le fichier treetagger comme unique support(sauf option -u)
 
@@ -203,47 +227,50 @@ https://github.com/OzzyProjects/BAO3\n";
 # lancement en version standard -s (BAO1 + BAO2 + BAO3)
 elsif (@opt_s){	
 
-	# on recupere le premier argument (repertoire)
+	# on récupère le premier argument (répertoire)
 	my $folder = $opt_s[0];
-	# on recupere le second argument (code de la catégorie)
+	# on récupère le second argument (code de la catégorie)
 	my $code = $opt_s[1];
-	# on recupere le modele à utiliser par udpipe
+	# on récupère le modele à utiliser par udpipe
 	my $udpipe_model = $opt_s[2];
-	# on recupere le fichier de sortie de la BAO2 udpipe
+	# on récupère le fichier de sortie de la BAO2 udpipe
 	my $udpipe_file = $opt_s[3];
-	# on recupere le fichier de sortie de la BAO2 treetagger
+	# on récupère le fichier de sortie de la BAO2 treetagger
 	my $treetagger_file = $opt_s[4];
-	# on recupere le pattern pour la recuperation des patrons
+	# on récupère le pattern pour la recuperation des patrons
 	my $motifs_patrons = $opt_s[5];
 
 	# si le code de la categorie est introuvable dans le dictionnaire, on met fin au script
 	die "Code de categorie introuvable !\n" unless exists($categories->{$code});
 
-	# si l'option de classification automatique a été activée, on va entrainer Cosine Similarity avec les categories
+	# si l'option de classification automatique a été activée, on va entrainer Cosine Similarity avec les catégories
 	if (@opt_filter){
 
 		# on ouvre le fichier de classification récapitulatif en écriture
 		open $filehandle, ">:encoding(utf-8)", $opt_filter[1] or die "$!\n";
-		# on lance l'entrainement des categories
+		# on lance l'entrainement des catégories
 		&train_cosine_similarity($opt_filter[0], $categories->{$code});
 	}
 
-	# liste de tous les fichiers xml rss correspondant à la catégorie (reference anonyme à un array)
+	# liste de tous les fichiers xml rss correspondant à la catégorie (référence anonyme à un array)
 	my $xmls = [];
 
-	# reference anonyme sur hash (dictionnaire) ayant pour clé le titre et la description concaténés et en valeur la date de publication
+	# référence anonyme sur hash (dictionnaire) ayant pour clé le titre et la description concaténés et en valeur la date de publication
 	my $items = {};
-
-	# on ouvre les deux fichiers de sortie de la BAO1 en ecriture (txt et xml)
+	# référence anonyme sur hash (dictionnaire) ayant pour clé le titre, la description et la date concaténés et en valeur le chemin du fichier XML
+	my $items_file = {};
+	# ces deux hash concernent tous les items
+	
+	# on ouvre les deux fichiers de sortie de la BAO1 en écriture (txt et xml)
 	open my $output_xml, ">:encoding(utf-8)", "$categories->{$code}.xml" or die "$!";
 	open my $output_txt, ">:encoding(utf-8)", "$categories->{$code}.txt" or die "$!";
 	            
 	# écriture de l'en-tete du fichier xml de sortie
 	print $output_xml "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n";
-	# ecriture de la balise racine du document XML
+	# écriture de la balise racine du document XML
 	print $output_xml "<items>\n";
 
-	# nom par defaut du fichier de sortie d'extraction des patrons
+	# nom par défaut du fichier de sortie d'extraction des patrons
 	my $default_patron_file = "patrons.txt";
 
 	# on fait appel à la subroutine parcourir. recurse !
@@ -261,36 +288,36 @@ elsif (@opt_s){
 	# on parse les fichiers xml rss
 	&parsefiles;
 
-	# on applique l'etiquetage avec udpipe et tree-tagger sur le fichier txt de sortie de la BAO1
+	# on applique l’étiquetage avec udpipe et tree-tagger sur le fichier txt de sortie de la BAO1
 	&etiquetage($udpipe_model, $udpipe_file, $treetagger_file);
 
-	# on va extraire les patrons soit via le fichier udpipe soit via le fichier treetagger et les ecrire dans un fichier de sortie
-	# en utilisant l'operateur ternaire
-	# on passe par reference le tableau des POS @opt_m (pas le choix car plusieurs parametres)
+	# on va extraire les patrons soit via le fichier udpipe soit via le fichier treetagger et les écrire dans un fichier de sortie
+	# en utilisant l’opérateur ternaire
+	# on passe par référence le tableau des POS @opt_m (pas le choix car plusieurs paramètres)
 	$opt_patrons ? &extract_patrons_udpipe($udpipe_file, $default_patron_file, \@opt_m) : 
 	&extract_patrons_treetagger($treetagger_file.".xml", $default_patron_file, \@opt_m);
 
 #-----------------------------------------------------------------------------------------------------------------------------------------------------
 
-	# parcours toute l'arborescence de fichiers à partir d'un repertoire
+	# parcours toute l'arborescence de fichiers à partir d'un répertoire
 	sub parcourir{
 	    
-	    # on recupere l'argument de la subroutine
+	    # on récupère l'argument de la subroutine
 	    my $folder = shift @_;
 	    # on supprime le / final si il existe
 	    $folder =~ s/\/$//;
-	    # on recupere les fichiers et dossier du repertoire
+	    # on récupère les fichiers et dossier du répertoire
 	    opendir my $dir, $folder;
-	    # on liste tous les fichiers et dossiers du repertoire
+	    # on liste tous les fichiers et dossiers du répertoire
 	    my @files = readdir $dir;
-	    # on ferme le repertoire
+	    # on ferme le répertoire
 	    closedir $dir;
 	    
-	    # pour chaque element dans mon repertoire
+	    # pour chaque élément dans mon répertoire
 	    foreach my $file(@files){
 	        
 	        next if $file =~ /^\.\.?$/;
-	        # on constitue le chemin d'acces complet du fichier/dossier
+	        # on constitue le chemin d’aces complet du fichier/dossier
 	        my $f = $folder."/".$file;
 	        
 	        # si c'est un dossier, on fait appel à la récursivité
@@ -304,17 +331,18 @@ elsif (@opt_s){
 	        	push @$xmls, $f;
 
 	           	# si l'option de classification a été spécifiée, on va classifier chaque fichier XML à l'aide du module
-	           	# CS et ecrire le resultat dans le fichier récapitulatif
+	           	# CS et écrire le résultat dans le fichier récapitulatif
 	           	if (@opt_filter){
 	           		print $filehandle "$f\n";
-	           		# on recupere le sac de mots du fichier xml
+	           		# on récupère le sac de mots du fichier xml
 	           		my $bag_of_words = &get_bag_of_words_xml($f);
-	           		# on l'ajoute dans la base du Data::CosineSimilarity
+	           		# on l'ajoute dans la base de données du Data::CosineSimilarity
 	           		$cosinus_similarity->add('unknown_category' => $bag_of_words);
 	           		# le Data::CosineSimilarity calcule automatiquement la rubrique probable pour le fichier xml rss
 	           		my ($best_label, $r) = $cosinus_similarity->best_for_label('unknown_category');
-	           		print $filehandle "catégorie trouvée : $best_label, categorie : $categories->{$code}\n";
-	           		# si la rubrique attribuée par le Data::CosineSimilarity est la bonne, on incremente $rubriques_okay
+	           		print $filehandle "categorie trouvee : $best_label, categorie : $categories->{$code}\n";
+	           		print("$best_label\n");
+	           		# si la rubrique attribuée par le Data::CosineSimilarity est la bonne, on incrémente $rubriques_okay
 	           		if ($best_label eq $categories->{$code}){
 	           			$rubriques_okay++;
 	           		}
@@ -325,12 +353,40 @@ elsif (@opt_s){
 	    }
 	}
 
+#-------------------------------------------------------------------------------------------------------------------------------------------------------
+
+    # fonction qui écrit une autre BAO1 basée cette fois sur les fichiers. Les items ne sont pas triés par date mais ils le sont
+    # par fichier xml dans l'ordre de parcours de l’arborescence
+    # le fichier d'output est le suivant : bao1_regex_file.xml
+    sub write_bao1_file{
+
+        open my $output, ">:encoding(utf-8)", "bao1_regex_file.xml" or die "$!";
+        print $output "<items>\n";
+        my $global_counter = 1;
+        # on restreint les valeurs (fichier xml) en supprimant les doublons avec uniq
+        # pour chaque fichier xml pour éviter d'avoir plusieurs fois le même fichier et donc les mêmes items
+        foreach my $value(uniq(values %$items_file)){
+            print $output "<file name=\"$value\">\n";
+            # on récupère la liste des items pour ce fichier en triant les valeurs associées aux clefs
+            foreach my $key(grep {$items_file->{$_} eq $value} keys %$items_file){
+                my @t_d = split /\|\|/, $key;
+                # on écrit les données dans le fichier xml de sortie avec le nom du fichier associé pour chaque item
+                print $output "<item numero=\"$global_counter\" date=\"$t_d[2]\">\n<titre>$t_d[0]</titre>\n";
+                print $output "<description>$t_d[1]</description>\n</item>\n";
+                $global_counter++;
+            }
+            print $output "</file>\n";
+        }
+		print $output "</items>\n";
+        close $output;
+    }
+
 
 #-----------------------------------------------------------------------------------------------------------------------------------------------------
 
-	# routine qui traite les fichiers xml rss recuperes
+	# routine qui traite les fichiers xml rss récupérés
 	sub parsefiles{
-	    
+
 	    # pour chaque fichier xml rss correspondant à la catégorie
 	    foreach my $file(@$xmls){
 	        
@@ -338,42 +394,48 @@ elsif (@opt_s){
 	        open my $input, "<:encoding(utf-8)","$file" or die "$!";
 	        undef $/;
 	        my $ligne=<$input>; # on lit intégralement (slurp mode)
-	        # dans le perl cookbook, ils recommandent les modificateurs msx en general pour les regexp
+	        # dans le Perl Cookbook, ils recommandent les modificateurs msx en général pour les regex
+
 			while ($ligne=~/<item><title>(.+?)<\/title>.*?<description>(.+?)<\/description>/msgsx) {
 	            # l'option s dans la recherche permet de tenir compte des \n
-	            my $titre=&nettoyage($1);
-	            my $description=&nettoyage($2);
-	            my $date = format_date($file);
-	            
-	            # on ajoute le titre et la description concaténés dans le hash en tant que clé et ayant comme valeur la date de publication
-	            # si la clé n'existe pas déja (les clés doivent etre uniques dans un hash donc on verifie au préalable avec un test unless)
-	            my $item = $titre."||".$description;
+	            my $titre = &nettoyage($1);
+	            my $description = &nettoyage($2);
+	            my $date = &format_date($file);
+	            # on ajoute le titre,la description et le nom du fichier concaténés dans le hash en tant que clé et ayant comme valeur la date de publication
+	            # si la clé n'existe pas déja (les clés doivent etre uniques dans un hash donc on vérifie au préalable avec un test unless)
+	            my $item = $titre."||".$description."||".$file;
+	            my $item_file = $titre."||".$description."||".$date;
 	            $items->{$item} = $date unless exists($items->{$item});
-
+	            $items_file->{$item_file} = $file unless exists($items_file->{$item_file});
 	        }
 	        # on ferme le fichier xml rss
 	        close $input;
 	        
 	    }
+
+	    # on fait le fichier de la BAO1 avec les items triés cette fois par fichier en multi-threading
+	    my $thread = Thread->create(&write_bao1_file);
+	    # on laisse le thread se terminer tout seul
+	    $thread->detach();
 	    
 	    # pour chaque clé du dictionnaire (pour chaque item unique)
 	    # keys renvoie un array des clés du dictionnaire
 	    my $compteur = 1;
 	    foreach my $key(sort { $items->{$a} <=> $items->{$b} or $a cmp $b } keys %$items){
 	        
-	        # on recupere le titre et la description avec split avec comme séparateur || qui renvoie un tableau des elements splittés
+	        # on récupère le titre et la description avec split avec comme séparateur || qui renvoie un tableau des éléments splittés
 	        # $t_d[0] = titre
 	        # $t_d[1] = description
+	        # $t_d[2] = nom du fichier associé
 	        my @t_d = split(/\|\|/, $key);
 	        
-	        # on écrit les données dans le fichier xml de sortie
-	        # on recupere la date de publication
-	        print $output_xml "<item numero=\"$compteur\" date=\"$items->{$key}\"><titre>$t_d[0]</titre>\n";
+	        # on écrit les données dans le fichier xml de sortie avec le nom du fichier associé pour chaque item
+	        print $output_xml "<item numero=\"$compteur\" date=\"$items->{$key}\" file=\"$t_d[2]\">\n<titre>$t_d[0]</titre>\n";
 	        print $output_xml "<description>$t_d[1]</description>\n</item>\n";
+	        
 	        # on écrit les données dans le fichier txt de sortie
-
-	        print $output_txt "$t_d[0]\n";
-	        print $output_txt "$t_d[1]\n";
+	        print $output_txt "titre : $t_d[0]\n";
+	        print $output_txt "description : $t_d[1]\n";
 	        
 	        $compteur++;
 	    }
@@ -390,7 +452,7 @@ elsif (@opt_s){
 
 #-----------------------------------------------------------------------------------------------------------------------------------------------------
 
-	# fonction qui recupere la date à partir du chemin du fichier
+	# fonction qui récupère la date de publication à partir du chemin du fichier
 	sub format_date{
 		
 		my $file = shift;
@@ -403,11 +465,11 @@ elsif (@opt_s){
 	# etiquete le fichier txt de sortie de la BAO1 avec UDPipe et Tree-Tagger
 	sub etiquetage {
 		
-		# on recupere le modele à utiliser par udpipe
+		# on récupère le modèle à utiliser par udpipe
 		my $modele = shift @_;
-		# on recupere le fichier de sortie BAO2 udpipe
+		# on récupère le fichier de sortie BAO2 udpipe
 		my $file_output_udpipe = shift @_;
-		# on recupere le fichier de sortie BAO2 treetagger
+		# on récupère le fichier de sortie BAO2 treetagger
 		my $file_output_treetagger = shift @_;
 		
 		# ********** etiquetage avec treetagger **************
@@ -420,9 +482,9 @@ elsif (@opt_s){
 		# fichier xml de sortie temporaire
 		open my $tagger_xml, ">:encoding(utf-8)", "temporaire.xml" or die "$!\n";
 		
-		# écriture de l'en-tete du fichier xml
+		# écriture de l'en-tête du fichier xml
 		print $tagger_xml "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n";
-		# ecriture de la balise racine du document XML
+		# écriture de la balise racine du document XML
 		print $tagger_xml "<items>\n";
 		
 		# compteur d'items
@@ -430,15 +492,15 @@ elsif (@opt_s){
 		# pour chaque item
 		foreach my $key(sort { $items->{$a} <=> $items->{$b} or $a cmp $b } keys %$items){
 			
-			# on recupere le titre et la description
+			# on récupère le titre et la description
 			my @t_d = split(m/\|\|/, $key);
 			# on preetiquete le titre et la description (tokenisation)
 			my $titre_etiquete = &preetiquetage($t_d[0]);
 			my $description_etiquete = &preetiquetage($t_d[1]);
 
-			# on ecrit chaque item dans le fichier xml temporaire en y incluant des métadonnées (numero de l'item et date de publication)
-			print $tagger_xml "<item numero=\"$compteur\" date=\"$items->{$key}\"><titre>\n$titre_etiquete\n</titre><description>\n$description_etiquete\n</description></item>\n";
-			# on incremente le compteur
+			# on écrit chaque item dans le fichier xml temporaire en y incluant des métadonnées (numero de l'item et date de publication)
+			print $tagger_xml "<item numero=\"$compteur\" date=\"$items->{$key}\" fichier=\"$t_d[2]\"><titre>\n$titre_etiquete\n</titre><description>\n$description_etiquete\n</description></item>\n";
+			# on incrémente le compteur
 			$compteur++;
 			
 		}
@@ -484,7 +546,7 @@ elsif (@opt_s){
 			$model->parse($sentence, $Ufal::UDPipe::Model::DEFAULT);
 	 
 			my $conll = $conllu_output->writeSentence($sentence);
-			# on écrit le resultat du traitement udpipe dans le fichier de sortie BAO2 pour chaque phrase
+			# on écrit le résultat du traitement udpipe dans le fichier de sortie BAO2 pour chaque phrase
 			print $output "$conll";
 
 		}
@@ -497,13 +559,13 @@ elsif (@opt_s){
 #-----------------------------------------------------------------------------------------------------------------------------------------------------
 
 	# fonction qui preetiquete une string en la tokenisant
-	# retourne la string tokénisée
+	# retourne la string tokenisée
 	sub preetiquetage{
 		
-		# on recupere la string à preetiqueter
+		# on récupère la string à preetiqueter
 		my $string = shift @_;
 		
-		# on ecrit la string dans un fichier txt temporaire
+		# on écrit la string dans un fichier txt temporaire
 		open my $output, ">:encoding(utf-8)", "temporaire.txt";
 		print $output $string;
 		close $output;
@@ -517,7 +579,7 @@ elsif (@opt_s){
 		my $tokenised_string = <$input>;
 		close $input;
 		
-		# on retourne la string tokénisée
+		# on retourne la string tokenisée
 		return $tokenised_string;
 	}
 		
@@ -525,84 +587,83 @@ elsif (@opt_s){
 
 	# fonction qui va extraire les pos + mots à partir du fichier UDPipe en prenant en compte les mots séquencés en
 	# deux tokens comme le DET "des" qui est séquencé en deux tokens ("de" et "les")
-	# pour cela, elle recupere le pos et son tag en 2 temps, le pos et le mot étant sur deux lignes differentes
+	# pour cela, elle récupère le pos et son tag en 2 temps, le pos et le mot étant sur deux lignes différentes
 	sub extract_patrons_udpipe{
 
-		# on recupere le fichier udpipe
+		# on récupère le fichier udpipe
 		my $udfile_input = shift @_;
-		# on recupere le nom du fichier d'extraction des patrons
+		# on récupère le nom du fichier d'extraction des patrons
 		my $udfile_output = shift @_;
-		# on recupere le motif d'extraction sous la forme d'une reference à un array
+		# on récupère le motif d'extraction sous la forme d'une référence à un array
 		my $patron = shift @_;
-		# on crée la regexp pour ce motif d'extraction
+		# on crée la regex pour ce motif d'extraction
 		my $patron_regexp = &create_pattern($patron, 1);
 		# le pattern pour extraire le mot et son POS dans le fichier de sortie udpipe
 		my $pattern = qr(^\d+\t([^\t]+)\t[^\t]+\t([^\t]+)\t);
-		# pos_word = la chaine qui va contenir tous nos tokens + POS concaténés par phrase organisés selon une structure precise
+		# pos_word = la chaine qui va contenir tous nos tokens + POS concaténés par phrase organisés selon une structure précise
 		my $pos_words = undef;
-		# on retablit le separateur d'enregistrement à '\n' pour enlever le slurp mode
+		# on rétablit le séparateur d'enregistrement à '\n' pour enlever le slurp mode
 		open my $patron_file, '>:encoding(utf-8)', $udfile_output or die "$!\n";
 		open my $udfile, "<:encoding(utf-8)", $udfile_input or die "$!\n";
 
-		# numero de la ligne dans laquelle se trouve le pos
+		# numéro de la ligne dans laquelle se trouve le pos
 		my $target_line_number = -1;
-		# numero de la ligne courante dans la phrase
+		# numéro de la ligne courante dans la phrase
 		my $current_line_number = 1;
 		local $/ = "\n";
 		# pour chaque ligne du fichier udpipe
 		while (my $line = <$udfile>){
 
-			# on enleve le saut de ligne final
+			# on enlève le saut de ligne final
 			chomp $line;
-			# on enleve les sauts de ligne et les retours charriot en fin de ligne
+			# on enlève les sauts de ligne et les retours charriot en fin de ligne
 			$line =~ s/\r\n?//;
 
-			# on recupere le numero courant de la ligne dans la phrase
+			# on récupère le numéro courant de la ligne dans la phrase
 			$line =~ /^(\d+)/;
 			$current_line_number = $1;
 
-			# si la phrase commence par # ou qu'il s'agit d'une ligne entre la ligne du pos mal sequence et la target_line_number, on passe à la phrase suivante
+			# si la phrase commence par # ou qu'il s'agit d'une ligne entre la ligne du pos mal séquencé et la target_line_number, on passe à la phrase suivante
 			next if $line =~ /^#/ or $current_line_number == $target_line_number - 1;
 
-			# si la ligne n'est pas une ligne vide ou n'est pas faite uniquement que de caracteres non imprimables
+			# si la ligne n'est pas une ligne vide ou n'est pas faite uniquement que de caractères non imprimables
 			if ($line !~ /^\R*$/){
 
-				# si la ligne commence par une sequence du genre 3-4 ou 1-2, on va extraire la forme du mot et l'ajouter à pos_words
+				# si la ligne commence par une séquence du genre 3-4 ou 1-2, on va extraire la forme du mot et l'ajouter à pos_words
 				if ($line =~ /^\d+\-\d+/){
-					# on établit le numero de la ligne à atteindre pour avoir le pos du mot (c'est n+1)
+					# on établit le numéro de la ligne à atteindre pour avoir le pos du mot (c'est n+1)
 					$target_line_number = $current_line_number + 1;
-					# on recupere la forme du mot qu'on ajoute à $pos_words
+					# on récupère la forme du mot qu'on ajoute à $pos_words
 					$line =~ /^\d+\-\d+\t([^\t]+)/;
 					$pos_words .= "$1ͱ";
 				}
-				# si la ligne courante est la target line, on va recuperer le POS du mot et l'ajouter à pos_words
+				# si la ligne courante est la target line, on va récupérer le POS du mot et l'ajouter à pos_words
 				elsif ($current_line_number == $target_line_number){
 
-					# on recupere le pos du mot dans le fichier udpipe à la target_line_number
+					# on récupère le pos du mot dans le fichier udpipe à la target_line_number
 					$line =~ /^\d+\t[^\t]+\t[^\t]+\t([^\t]+)\t/;
-					# on ajoute à pos_words le motif formeͱpos separe par le caractere ←
+					# on ajoute à pos_words le motif formeͱpos séparé par le caractère ←
 					$pos_words .= "$1←";
 					# on reset la target_line_number à 0
 					$target_line_number = 0;
 
 				}
-				# on recupere la forme du mot et son POS si il s'agit d'une ligne normale
+				# on récupère la forme du mot et son POS si il s'agit d'une ligne normale
 				else{
 
 				$line =~ /$pattern/;
-				# on les ordonne de cette facon dans pos_words; formeͱPOS←, qu'on ajoute à la chaine pos_words
+				# on les ordonne de cette façon dans pos_words; formeͱPOS←, qu'on ajoute à la chaine pos_words
 				$pos_words .= "$1ͱ$2←";
-				# exmple de pos_word = leͱ$DET←presidentͱ$NOUN←aͱAUX←decideͱVERB← etc...
+				# exemple de pos_word = leͱDET←presidentͱ$NOUN←aͱAUX←decideͱVERB← etc...
 				}
 				
 			} 
-			# si on est arrivé à la fin de notre phrase (ligne vide dans udpipe comme seperateur), il est temps de faire l'extraction des patrons
+			# si on est arrivé à la fin de notre phrase (ligne vide dans udpipe comme séparateur), il est temps de faire l'extraction des patrons
 			else{
 
-				# pos_words acquiere automatiquement la valeur undef, seule valeur de retour de write_patrons pour reinitialiser 
+				# pos_words acquière automatiquement la valeur undef, seule valeur de retour de write_patrons pour réinitialiser 
 				# cette variable pour la phrase suivante car nouveau motif				
 				$pos_words = &write_patron(\$patron_file, $pos_words, $patron_regexp, $patron);	
-
 			}	
 		}
 
@@ -622,36 +683,36 @@ elsif (@opt_s){
 	sub extract_patrons_treetagger{
 
 		my $treetagger_input = shift @_;
-		# on recupere le nom du fichier d'extraction des patrons
+		# on récupère le nom du fichier d'extraction des patrons
 		my $treetagger_output = shift @_;
-		# on recupere le motif d'extraction sous la forme d'une reference à un array
+		# on récupère le motif d'extraction sous la forme d'une référence à un array
 		my $patron = shift @_;
-		# on crée la regexp pour ce motif d'extraction
+		# on crée la regex pour ce motif d'extraction
 		my $patron_regexp = &create_pattern($patron, undef);
 		# pattern d'extraction du pos et du mot dans le fichier treetagger
 		my $pattern = qr(<data type="type">([A-Z]+)(?:\:{1}\w+)?</data><data type="lemma">.+</data><data type="string">(.+)</data>);
 		# pos_word = la chaine qui va contenir tous nos tokens + POS concaténés par phrase organisés selon une structure precise
 		my $pos_words = undef;
-		# on retablit le separateur d'enregistrement à '\n' pour enlever le slurp mode
+		# on rétablit le séparateur d'enregistrement à '\n' pour enlever le slurp mode
 		open my $patron_file, '>:encoding(utf-8)', $treetagger_output or die "$!\n";
 		open my $treetagger_file, "<:encoding(utf-8)", $treetagger_input or die "$!\n";
 		# pour chaque ligne du fichier udpipe
 		local $/ = "\n";
 		while (my $line = <$treetagger_file>){
 
-			# on enleve le saut de ligne final
+			# on enlève le saut de ligne final
 			chomp $line;
 
-			# si la ligne contient la balise </titre> ou </description>, il faut realiser l'extraction du patron
+			# si la ligne contient la balise </titre> ou </description>, il faut réaliser l'extraction du patron
 			if ($line =~ /<\/titre>|<\/description>/){
 				
-			# pos_words acquiere automatiquement la valeur undef, seule valeur de retour de write_patrons pour reinitialiser 
+			# pos_words acquière automatiquement la valeur undef, seule valeur de retour de write_patrons pour réinitialiser 
 			# cette variable pour la phrase suivante car nouveau motif
 			$pos_words = &write_patron(\$patron_file, $pos_words, $patron_regexp, $patron);
 			}
 
-			# si la ligne ne commence pas par la balise <element>, on passe à la ligne suivante
-			next if $line !~ /^<element>/;
+			# si la ligne ne commence pas par la balise <élément>, on passe à la ligne suivante
+			next unless $line =~ /^<element>/;
 
 			# si la ligne matche avec notre pos_pattern, on ajoute le pos du mot et le mot à pos_words
 			$line =~ /$pattern/;
@@ -670,7 +731,7 @@ elsif (@opt_s){
 
 #-----------------------------------------------------------------------------------------------------------------------------------------------------
 
-	# fonction qui crée un pattern de recherche à partir du modele de POS entré
+	# fonction qui crée un pattern de recherche à partir du modèle de POS entré
 	sub create_pattern{
 
 		my $pattern = undef;
@@ -680,13 +741,13 @@ elsif (@opt_s){
 
 		# si pattern_udpipe est defini, on crée le pattern pour la structure udpipe
 		if (defined($pattern_udpipe)){
-			# on etablit la liste des POS autorisés dans UDPipe
+			# on établit la liste des POS autorisés dans UDPipe
 			my @liste_autorisee_udpipe = qw(NOUN PUNCT VERB ADJ ADV ADP PROPN DET SCONJ NUM PRON AUX CCONJ);
-			# si un des POS n'existe pas dans UDPpipe, on met fin au script sinon on cree la regexp de recherche de patrons
+			# si un des POS n'existe pas dans UDPpipe, on met fin au script sinon on crée la regex de recherche de patrons
 			foreach my $pos (@$liste_patrons){
 				die "Un des motifs de recherche n'existe pas !\n" unless ($pos ~~ @liste_autorisee_udpipe);
-				# on n'interpolate pas la string (simple quote) pour eviter les soucis des caracteres speciaux ensuite à despecialiser
-				# j'ai mis l'unicode point de l'apastrophe "francaise" car ca ne marchait pas sinon
+				# on n'interpolate pas la string (simple quote) pour éviter les soucis des caractères spéciaux ensuite à déspécialiser
+				# j'ai mis l’Unicode point de l’apostrophe "française" car ça ne marchait pas sinon (U+2019)
 				$pattern .= '(\w+\-?\w*(?:\x{2019}{1})?)ͱ'.$pos."←";
 			}
 		}
@@ -695,7 +756,7 @@ elsif (@opt_s){
 			# liste autorisée des POS pour treetagger()
 			my @liste_autorisee_treetagger = qw(NOM ADJ PRP PUN NAM SENT ADV KON DET VER PRO NUM);
 			foreach my $pos (@$liste_patrons){
-				# si un des POS n'existe pas dans treetagger, on met fin au script sinon on cree la regexp de recherche de patrons
+				# si un des POS n'existe pas dans treetagger, on met fin au script sinon on crée la regex de recherche de patrons
 				die "Un des motifs de recherche n'existe pas !\n" unless ($pos ~~ @liste_autorisee_treetagger);
 				$pattern .= $pos.'ͱ(\w+\-?\w*(?:\x{2019}{1})?)'."←";
 			}
@@ -708,12 +769,12 @@ elsif (@opt_s){
 
 	sub write_patron{
 		
-		# on recupere le filehandle du fichier d'extraction des patrons pour eviter les appels de fonction en ecriture recurrents
+		# on récupère le filehandle du fichier d'extraction des patrons pour éviter les appels de fonction en écriture récurrents
 		my $file_handle_ref = shift @_;
 		my $pos_words = shift @_;
-		# on recupere le motif d'extraction des patrons
+		# on récupère le motif d'extraction des patrons
 		my $pattern = shift @_;
-		# on recupere la reference au tableau qui regroupe les differentes POS à trouver
+		# on récupère la référence au tableau qui regroupe les différentes POS à trouver
 		my $patron = shift @_;
 		my @capture = ($pos_words =~ /$pattern/g);
 		# on skip si @capture est vide (pas de patron correspondant)
@@ -721,12 +782,12 @@ elsif (@opt_s){
 			# on quitte la subroutine et on renvoie undef pour la phrase suivante
 			return undef;
 		}
-		# on instancie un iterateur qui va iterer par dessus x elements en gardant les valeurs skippées des elements dans une liste.
-		# ici on calcule le x en comptant le nombre d'elements de POS constituant le motif avec scalar.
-		# c'est le role de la fonction natatime de List::MoreUtils
+		# on instancie un iterateur qui va itérer par dessus x éléments en gardant les valeurs skippées des éléments dans une liste.
+		# ici on calcule le x en comptant le nombre d’éléments de POS constituant le motif avec scalar.
+		# c'est le rôle de la fonction natatime de List::MoreUtils
 		my $it = natatime scalar(@$patron), @capture;
 		while (my @vals = $it->()){
-			# on ecrit dans le fichier de sortie l'ensemble de la sequence qui correspond au patron recherche
+			# on écrit dans le fichier de sortie l'ensemble de la séquence qui correspond au patron recherché
 			print { $$file_handle_ref } "@vals\n";
 		}
 		# on quitte la subroutine et on renvoie undef pour la phrase suivante
@@ -750,45 +811,45 @@ sub exit_bad_usage{
 
 #-----------------------------------------------------------------------------------------------------------------------------------------------------
 
-# fonction qui recupere un sac de mots comme dictionnaire avec en valeur l'occurrence de chaque mot
-# le sac de mots est trié, on enleve les stopwords, les mots de moins de 2 lettres (n'apportent rien semantiquemnt)
-# et on opere une dédiacritisation de tous les mots pour tout standardiser
-# les occurrences de chaque mot serviront de features pour la recherche de similarté cosinus
+# fonction qui constitue un sac de mots comme dictionnaire avec en valeur l'occurrence de chaque mot
+# le sac de mots est trié, on enlève les stop words, les mots de moins de 2 lettres (n'apportent rien sémantiquement)
+# on récupère les forme lemmatisées des tokens et on compte les occurrences pour chaque token
+# les occurrences de chaque token serviront de features pour la recherche de similarité cosinus
 sub get_bag_of_words{
 
-	my $filename = shift @_;
-	# le hash sac de mots 
-	my %bow = ();
-	open my $input, "<:encoding(utf-8)", $filename or die "$!\n";
-	# lecture du fichier en mode ligne par ligne
-	local $/ = "\n";
-	while (my $line = <$input>){
-
-		# on skip si la ligne est vide ou faite uniquement de caracteres non imprimables
-		next if $line =~ /^\R*$/;
-		# on dediactrise la ligne en virant tous les accents des mots
-		my $normalised_line = (NFKD($line) =~ s/\p{NonspacingMark}//rg);
-		# on constitue notre sac de mots en splittant avec /s+/ la ligne et on ajoute en valeur du mot dans le hash du sac de mot
-		# son occurrence que l'on incremente à chaque fois qu'on rencontre ce mot
-		foreach my $word_bow (grep { !($_ ~~ @stopwords) and length($_) > 2} map { lc $_} split(/\s+/, $normalised_line)){
-			$bow{$word_bow}++;
-		}
+	my %lemmes = undef;
+	# par rapport au preprocessing de Spacy (récupération des lemmes + retrait des stop words), on ne garde pas les mots qui contiennent des chiffres,
+	# des signes de ponctuation ou qui sont tout simplement vides
+	foreach my $lemma(grep {$_ !~ /\d+|\W+|^$/} get_lemmas_from_file(file_lemmatizer(shift))){
+		# on compte l'occurrence de chaque token sous sa forme minuscule
+		$lemmes{lc $lemma}++;
 	}
-	
-	# on renvoie une reference du sac de mots standardisés
-	return \%bow;
+	# on renvoie une référence du sac de mots standardisés
+	return \%lemmes;
 }
 
 #-----------------------------------------------------------------------------------------------------------------------------------------------------
 
+# fonction qui récupère le contenu d'un fichier et le séquence en mots
+# ici on est au bord de l'obsfuscation mais il faut la fonction la plus rapide possible car elle est appelée très souvent
+sub get_lemmas_from_file{
+
+	# on ouvre le fichier d'input en lecteur avec l'argument de la subroutine
+	open my $fh, "<:encoding(utf-8)", $_[0]  or die "$!\n";
+	undef $/;
+	# on lit le fichier en slurp mode, on le découpe en mots, on ferme le filehandle et on supprime le fichier d'input
+	return split(/\W+/, join(" ",<$fh>)), close $fh, remove shift;
+}
+
+#-----------------------------------------------------------------------------------------------------------------------------------------------------
 # fonction get_bag_of_word pour les fichiers xml rss
 sub get_bag_of_words_xml{
 
 	my $filename = shift @_;
 	# le hash sac de mots 
-	my %bow = ();
+	my %lemmes = ();
 	# on ouvre en lecture le fichier xml rss
-	open my $input, "<:encoding(utf-8)","$filename" or die "$!";
+	open my $input, "<:encoding(utf-8)","$filename" or die "$!\n";
 	undef $/;
 	# contenu entier du fichier xml contenant tous les titres et descriptions.
 	my $file_content = undef;
@@ -801,64 +862,62 @@ sub get_bag_of_words_xml{
 	    $file_content .= " ".$titre." ".$description;
 	}
 
-	# on dediactrise la ligne en virant tous les accents des mots
-	my $normalised_line = NFKD($file_content);
-	$normalised_line =~ s/\p{NonspacingMark}//g;
-	# on constitue notre sac de mots en splittant avec /s+/ la ligne et on ajoute en valeur du mot dans le hash du sac de mot
-	# son occurrence que l'on incremente à chaque fois qu'on rencontre ce mot
-	foreach my $word_bow (grep { !($_ ~~ @stopwords) and length($_) > 2} map { lc $_} split(/\s+/, $normalised_line)){
-		$bow{$word_bow}++;
+	close $input;
+	foreach my $lemma(grep {$_ !~ /\d+|\W+|^$/} split(/\W+/, join(" ", content_lemmatizer($file_content)))){
+		# on compte l'occurrence de chaque token sous sa forme minuscule
+		$lemmes{lc $lemma}++;
 	}
-	
-	# on renvoie une reference du sac de mots standardisés
-	return \%bow;
+	# on renvoie une référence du sac de mots standardisés
+	return \%lemmes;
 }
 
 #-----------------------------------------------------------------------------------------------------------------------------------------------------
 
 # fonction qui permet de feeder en data notre Data::CosineSimilarity pour rechercher ensuite les similarités entre les rubriques
-# des années precedentes et un fichier xml rss à partir de la similarité cosinus
+# des années précédentes et un fichier xml rss à partir de la similarité cosinus
 # cette fonction utilise des sacs de mots triés selon l'occurrence des mots et place le dictionnaire de la catégorie dans l'objet Data::CosineSimilarity
 # avec pour label le nom de catégorie
-# on elimine les 2 ou 3 categories les plus proches dans CS pour obtenir un taux de reussite maximale
+# on elimine les 2 ou 3 catégories les plus proches dans CS pour obtenir un taux de réussite maximale
 sub train_cosine_similarity{
 	    
-	# chemin du dossier dans lequel se trouve les fichiers d'entrainement (pas de recursivité)
+	# chemin du dossier dans lequel se trouve les fichiers d'entrainement (pas de récursivité)
 	my $folder = shift @_;
 	my $category = shift @_;
 	$folder =~ s/\/$//;
 	opendir my $dir, $folder;
 	my @files = readdir $dir;
 	closedir $dir;
-	# pour chaque fichier d'entrainement (un fichier d'entrainement = les datas concaténées pour une seule categorie)
+	# pour chaque fichier d'entrainement (un fichier d'entrainement = les datas concaténées pour une seule catégorie)
 	foreach my $file(@files){
 		my $path_file = $folder."/".$file;
-		if ($file =~ /.txt/){
-			# on supprime l'extension finale du fichier pour avoir la categorie
-			$file =~ s/.txt//g;
+		if ($file =~ /\.txt/){
+			# on supprime l'extension finale du fichier pour avoir la catégorie
+			$file =~ s/\.txt//g;
+			print("$file\n");
 			# on constitue le sac de mots pour les datas du Data::CosineSimilarity
 			my $bag_of_words = &get_bag_of_words($path_file);
-			# si la categorie recherchée n'est ni idees, ni societe, on ne prend pas en compte ces categories dans le Data::CosineSimilarity
+			print(blessed($bag_of_words));
+			# si la catégorie recherchée n'est ni idées, ni société, on ne prend pas en compte ces catégories dans le Data::CosineSimilarity
 			if ($category ne "idees" and $category ne "societe"){
-				# si la categorie est planete ou technologies, on ne prend pas en compte economie, une,societe et idées dans le Data::CosineSimilarity
+				# si la catégorie est planète ou technologies, on ne prend pas en compte économie, une,société et idées dans le Data::CosineSimilarity
 				if ($category eq "planete" or $category eq "technologies"){
 					if ($file !~ /economie|une|societe|idees/){
 						$cosinus_similarity->add($file => $bag_of_words);
 					}
 				}
-				# pour une, on ne prend pas en compte les rubriques economie et international du Data::CosineSimilarity
+				# pour une, on ne prend pas en compte les rubriques économie et international du Data::CosineSimilarity
 				elsif ($category eq "une"){
 					if ($file !~ /economie|international/){
 						$cosinus_similarity->add($file => $bag_of_words);
 					}
 				}
-				# pour europe, on ne prend pas en compte la rubrique international dand le Data::CosineSimilarity
+				# pour europe, on ne prend pas en compte la rubrique international dans le Data::CosineSimilarity
 				elsif ($category eq "europe"){
 					if ($file !~ /international/){
 						$cosinus_similarity->add($file => $bag_of_words);
 					}
 				}
-				# pour le reste des categories, on ajoute toutes les rubriques sauf idees et societe dand le Data::CosineSimilarity
+				# pour le reste des categories, on ajoute toutes les rubriques sauf idées et société dans le Data::CosineSimilarity
 				else {
 					if ($file !~ /idees|societe/){
 	    			$cosinus_similarity->add($file => $bag_of_words);
