@@ -1,4 +1,4 @@
-# BAO3 version finale
+# BAO3-4 version finale
 Boite à outils 3 réalisée dans le cadre du projet encadré INALCO-Sorbonne Nouvelle d'extraction et d'analyse morpho-synthaxique d'un fil XML RSS pour l'année 2021
 LA BAO2 etant terminée (etiquetage avec treetagger et udpipe), on passe à la BAO3 (extraction de patrons)
 Cette BAO3 est une BAO1, BAO2 et BAO3 ou seulement une BAO3 (voir options). Elle peut aussi servir comme outils de classification seulement  ou d'extraction de patrons à partir de treetagger ou udpipe.
