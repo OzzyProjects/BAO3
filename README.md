@@ -58,11 +58,15 @@ L'option -u est utilisable pour une utilisation standard comme pour une utilisat
 l'option -f permet de catégoriser automatiquement les fichiers RSS à partir des datas des années précédentes et effectue un récapitulatif des résultats obtenus dans un fichier de sortie. Ce fichier contient pour chaque fichier XML RSS parcouru la catégorie identifiée en premier et la véritable catégorie à laquelle appartient le fichier XML RSS.
 Vous avez à la dernière ligne de ce fichier le taux de succès de la classification via Data::CosineSimilarity.
 Arguments à spécifier après l'option -f
-- répertoire dans lequel se trouve les fichiers d’entraînement des années précédentes (pas de sous dossier).
+
+-répertoire dans lequel se trouve les fichiers d’entraînement des années précédentes (pas de sous dossier).
+
 Les fichiers doivent porter le nom d'une catégorie et avoir une extension .txt
 Il ne doit y avoir que ces fichiers et rien d'autre dans le répertoire.
 Il ne doit y avoir que ces fichiers dans le répertoire.
-- nom du fichier de sortie récapitulatif (c'est a vous de choisir)
+
+-nom du fichier de sortie récapitulatif (c'est a vous de choisir)
+
 L'option -f n'est disponible que pour une utilisation standard (option -s).
 
 -c ou --c:
@@ -70,6 +74,7 @@ L'option -f n'est disponible que pour une utilisation standard (option -s).
 l'option -c permet de lancer le script en mode classification uniquement. Option qui va plus loin que l'option -f.
 L'option -c ou --c est un sous module à part entière dans le script. 
 Pour cela, elle requiert 4 arguments en ligne de commande et est incompatible avec une utilisation standard (option -s).
+
 ARGV[0] = -c (spécifie le mode de lancement du programme en mode classification uniquement)
 
 ARGV[1] = arborescence XML dans laquelle chercher les fichiers XML
@@ -95,6 +100,7 @@ L'option -d permet de lancer le script en mode extraction de relation de dépend
 L'option -d est un sous module à part entière dans le script.
 Ce sous module permet l'extraction de dépendances d'une relation choisie a partir du fichier txt udpipe.
 Pour cela, il requiert 4 arguments :
+
 ARGV[0] = -d (spécifie le mode de lancement du programme en mode extraction de dépendances uniquement)
 
 ARGV[1] = fichier de sortie udpipe au format txt
@@ -147,6 +153,7 @@ Exemple d'une utilisation standard avec extraction à partir du fichier treetagg
 perl bao3_regexp_classification.pl -s 2020 3476 modeles/french-gsd-ud-2.5-191206.udpipe udpipe_sortie.txt treetagger_sortie -m NOM ADJ
 
 Par défaut, le fichier de sortie dans lequel se trouve les patrons extraits se nomme patrons_[catégorie].txt et se situe dans le répertoire courant du script  où [catégorie] est le nom de la catégorie.
+
 Le script produit également un fichier BAO1 dans lequel les items sont classés non pas par date de publication (défaut) mais par fichier xml.
 Ce fichier se nomme bao1_regex_file.xml et est généré dans le répertoire courant du script.
 
