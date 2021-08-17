@@ -2,10 +2,8 @@
 
 ########################################################################
 #                                                                      #
-#  tokenization script for tagger preprocessing                        #
-#  Author: Helmut Schmid, IMS, University of Stuttgart                 #
-#          Serge Sharoff, University of Leeds                          #
-#  Description:                                                        #
+#  tokenization script for tagger preprocessing                        #                       #        
+#  Description:                                               		#
 #  - splits input text into tokens (one token per line)                #
 #  - cuts off punctuation, parentheses etc.                            #
 #  - disambiguates periods                                             #
