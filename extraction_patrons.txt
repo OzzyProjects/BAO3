@@ -1,6 +1,8 @@
 
 Patterns extracted from XML-RSS files
-All availale patterns can be extracted, from the lowest to 5+ tokens
+
+All available patterns can be extracted, from signle one to 5+ tokens
+The stemming implemented here is only available in french but the package has an english stemmer.
 
 PATTERN Det-Noun-Verb
 
