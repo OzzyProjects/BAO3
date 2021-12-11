@@ -4,7 +4,7 @@
 #use warnings;
 
 #--------------------------------------------------------------------------------------------------------------------------------------------------------
-# Auteurs : ARMANGAU Etienne & NGUYEN Julie & NIKOLSKY Alexandra
+# Auteurs : ARMANGAU Etienne & NGUYEN Julie
 # BAO1 + BAO2 + BAO3 ou seulement BAO3 (en option), + extraction des patrons à partir de UDPipe ou treetagger (au choix, en option, ou non) 
 # + classification automatique des fils RSS parcourus (ou non) et bien d'autres fonctionnalités (extraction de dépendances...)
 # Ce script est le couteau suisse du Projet Encadré
