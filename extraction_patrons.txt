@@ -1,5 +1,7 @@
 
-PATRON Determinant-Nom-Verbe
+Patterns extracted from XML-RSS files
+All availale patterns can be extracted, from the lowest to 5+ tokens
+
 PATTERN Det-Noun-Verb
 
 La justice met
