@@ -1,5 +1,6 @@
 
 PATRON Determinant-Nom-Verbe
+PATTERN Det-Noun-Verb
 
 La justice met
 toute violence faite
