@@ -10,6 +10,22 @@
 # Ce script est le couteau suisse du Projet Encadré
 #--------------------------------------------------------------------------------------------------------------------------------------------------------
 
+=pod
+
+sudo cpan
+
+install Timer::Simple
+
+install Ufal::UDPipe
+
+install File::Remove
+
+install Data::CosineSimilarity
+
+install Lingua::Stem::Fr
+
+=cut
+
 use Timer::Simple; # pour le timer
 use Ufal::UDPipe; # pour l'etiquetage UDPipe
 use File::Remove qw(remove); # pour la suppression des fichiers
